@@ -6,9 +6,12 @@ from app.config import Config
 import json
 import traceback
 
+from app.resources.libraries import libraries_api
+
 app = Flask(__name__)
 app.secret_key = Config.secret_key
 CORS(app, resources={r"/apply": {"origins": "*"}})
+app.register_blueprint(libraries_api, url_prefix='/api/v1')
 
 
 def register_session(args):
