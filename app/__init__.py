@@ -1,6 +1,6 @@
 from flask import Flask, request, render_template, session
 from flask_cors import CORS
-from app.database import db
+from app.database import db, initialize_database
 from app.database.models import Library
 from app.config import Config
 import json
@@ -12,6 +12,7 @@ app = Flask(__name__)
 app.secret_key = Config.secret_key
 CORS(app, resources={r"/apply": {"origins": "*"}})
 app.register_blueprint(libraries_api, url_prefix='/api/v1')
+# initialize_database() For local database
 
 
 def register_session(args):
