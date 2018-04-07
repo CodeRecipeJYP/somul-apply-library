@@ -1,7 +1,6 @@
-import json
-
-from flask import jsonify, Blueprint
-from flask_restful import Resource, reqparse, Api, fields, marshal_with
+from flask import Blueprint
+from flask_restful import Resource, reqparse, Api, fields, marshal_with, abort
+from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.database.models import Library
@@ -30,27 +29,29 @@ library_fields = {
 }
 
 
+libraryReqparse = reqparse.RequestParser()
+libraryReqparse.add_argument('name', type=str, trim=True)
+libraryReqparse.add_argument('location_road', type=str, trim=True)
+libraryReqparse.add_argument('location_number', type=str, trim=True)
+libraryReqparse.add_argument('location_detail', type=str, trim=True)
+
+libraryReqparse.add_argument('manager_name', type=str, trim=True)
+libraryReqparse.add_argument('manager_email', type=str, trim=True)
+libraryReqparse.add_argument('manager_phone', type=str, trim=True)
+libraryReqparse.add_argument('audiences', type=str, trim=True)
+
+libraryReqparse.add_argument('fac_beam_screen', type=bool)
+libraryReqparse.add_argument('fac_sound', type=bool)
+libraryReqparse.add_argument('fac_record', type=bool)
+libraryReqparse.add_argument('fac_placard', type=bool)
+libraryReqparse.add_argument('fac_self_promo', type=bool)
+
+libraryReqparse.add_argument('fac_other', type=str, trim=True)
+libraryReqparse.add_argument('req_speaker', type=str, trim=True)
+
+
 class LibraryListResource(Resource):
     def __init__(self):
-        self.reqparse = reqparse.RequestParser()
-        self.reqparse.add_argument('name', type=str, trim=True)
-        self.reqparse.add_argument('location_road', type=str, trim=True)
-        self.reqparse.add_argument('location_number', type=str, trim=True)
-        self.reqparse.add_argument('location_detail', type=str, trim=True)
-
-        self.reqparse.add_argument('manager_name', type=str, trim=True)
-        self.reqparse.add_argument('manager_email', type=str, trim=True)
-        self.reqparse.add_argument('manager_phone', type=str, trim=True)
-        self.reqparse.add_argument('audiences', type=str, trim=True)
-
-        self.reqparse.add_argument('fac_beam_screen', type=bool)
-        self.reqparse.add_argument('fac_sound', type=bool)
-        self.reqparse.add_argument('fac_record', type=bool)
-        self.reqparse.add_argument('fac_placard', type=bool)
-        self.reqparse.add_argument('fac_self_promo', type=bool)
-
-        self.reqparse.add_argument('fac_other', type=str, trim=True)
-        self.reqparse.add_argument('req_speaker', type=str, trim=True)
         super().__init__()
 
     @marshal_with(library_fields)
@@ -60,65 +61,82 @@ class LibraryListResource(Resource):
 
     @marshal_with(library_fields)
     def post(self):
-        args = self.reqparse.parse_args()
+        args = libraryReqparse.parse_args()
         library = Library(**args)
-        db.add(library)
+
+        error_message = None
         try:
+            db.add(library)
             db.commit()
+        except IntegrityError as e:
+            print(str(e))
+            error_message = 'Faulty or a duplicate record'
+        except Exception as e:
+            print(str(e))
+            error_message = str(e)
+        finally:
+            if error_message:
+                db.rollback()
+                raise Exception(error_message)
+        return library
 
-            return library
 
-        except:  # noqa: E722
-            db.rollback()
-            print("Unexpected DB server error")
-            return json.dumps({
-                "result": 1,
-                "cause": "Unexpected DB server error"
-            })
-        # db.add_all([
-        #     Library(
-        #         name=args["name"],
-        #         location_road=args["roadAddress"],
-        #         location_number=args["numberAddress"],
-        #         location_detail=args["detailAddress"],
-        #         manager_name=args["managerName"],
-        #         manager_email=args["managerEmail"],
-        #         manager_phone=args["managerPhone"],
-        #         audiences=args["capacity"],
-        #         fac_beam_screen=1 if args["facilityBeamOrScreen"] else 0,
-        #         fac_sound=1 if args["facilitySound"] else 0,
-        #         fac_record=1 if args["facilityRecord"] else 0,
-        #         fac_placard=1 if args["facilityPlacard"] else 0,
-        #         fac_self_promo=1 if args["facilitySelfPromo"] else 0,
-        #         fac_other=args["facilityOther"],
-        #         req_speaker=args["requirements"]
-        #     )
-        # ])
-        #
-        # try:
-        #     db.commit()
-        #
-        #     return json.dumps({
-        #         "result": 0
-        #     })
-        # except:  # noqa: E722
-        #     db.rollback()
-        #     print("Unexpected DB server error")
-        #     return json.dumps({
-        #         "result": 1,
-        #         "cause": "Unexpected DB server error"
-        #     })
+def get_or_404(clazz, pk):
+    instance = db.query(clazz).filter_by(_id=pk).first()
+    if instance is None:
+        abort(404, message="Library {} Not found".format(pk))
+
+    return instance
 
 
 class LibraryResource(Resource):
-    def get(self, id):
-        return jsonify({'library': 1})
+    @marshal_with(library_fields)
+    def get(self, pk):
+        library = get_or_404(Library, pk)
+        return library
 
-    def put(self, id):
-        return jsonify({'library': 1})
+    @marshal_with(library_fields)
+    def put(self, pk):
+        args = libraryReqparse.parse_args()
+        library = get_or_404(Library, pk)
 
-    def delete(self, id):
-        return jsonify({'library': 1})
+        error_message = None
+        try:
+            for key, value in args.items():
+                if value is None:
+                    continue
+
+                setattr(library, key, value)
+
+            db.merge(library)
+            db.commit()
+        except IntegrityError as e:
+            print(str(e))
+            error_message = 'Faulty or a duplicate record'
+        except Exception as e:
+            print(str(e))
+            error_message = str(e)
+        finally:
+            if error_message:
+                db.rollback()
+                raise Exception(error_message)
+        return library
+
+    def delete(self, pk):
+        library = get_or_404(Library, pk)
+
+        error_message = None
+        try:
+            db.delete(library)
+            db.commit()
+        except Exception as e:
+            print(str(e))
+            error_message = str(e)
+        finally:
+            if error_message:
+                db.rollback()
+                raise Exception(error_message)
+        return '', 204
 
 
 libraries_api = Blueprint('resources.libraries', __name__)
@@ -131,6 +149,6 @@ api.add_resource(
 
 api.add_resource(
     LibraryResource,
-    '/library/<int:id>',
+    '/library/<int:pk>',
     endpoint='library'
 )
