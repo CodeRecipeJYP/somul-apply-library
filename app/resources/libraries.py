@@ -1,5 +1,5 @@
 from flask import Blueprint
-from flask_restful import Resource, reqparse, fields, marshal_with, Api
+from flask_restful import Resource, reqparse, fields, marshal_with, Api, marshal
 from sqlalchemy.exc import IntegrityError
 
 from app import db
@@ -13,9 +13,6 @@ library_fields = {
     'location_number': fields.String,
     'location_detail': fields.String,
 
-    'manager_name': fields.String,
-    'manager_email': fields.String,
-    'manager_phone': fields.String,
     'audiences': fields.String,
 
     'fac_beam_screen': fields.Boolean,
@@ -26,6 +23,12 @@ library_fields = {
 
     'fac_other': fields.String,
     'req_speaker': fields.String,
+}
+
+library_protected_fields = {
+    'manager_name': fields.String,
+    'manager_email': fields.String,
+    'manager_phone': fields.String,
 }
 
 
@@ -66,10 +69,15 @@ class LibraryListResource(Resource):
     def __init__(self):
         super().__init__()
 
-    @marshal_with(library_fields)
     def get(self):
         libraries = db.query(Library).all()
-        return libraries
+
+        is_admin = False
+        resp_fields = library_fields
+        if is_admin:
+            resp_fields = {**library_fields, **library_protected_fields}
+
+        return marshal(libraries, resp_fields)
 
     @marshal_with(library_fields)
     def post(self):
@@ -93,10 +101,15 @@ class LibraryListResource(Resource):
 
 
 class LibraryResource(Resource):
-    @marshal_with(library_fields)
     def get(self, pk):
         library = get_or_404(Library, pk)
-        return library
+
+        is_admin = False
+        resp_fields = library_fields
+        if is_admin:
+            resp_fields = {**library_fields, **library_protected_fields}
+
+        return marshal(library, resp_fields)
 
     @marshal_with(library_fields)
     def put(self, pk):
