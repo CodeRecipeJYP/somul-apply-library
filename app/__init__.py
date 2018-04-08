@@ -12,7 +12,7 @@ app = Flask(__name__)
 app.secret_key = Config.secret_key
 CORS(app, resources={r"/apply": {"origins": "*"}})
 app.register_blueprint(libraries_api, url_prefix='/api/v1')
-# initialize_database()  # For local database
+initialize_database()  # For local database
 
 
 def register_session(args):

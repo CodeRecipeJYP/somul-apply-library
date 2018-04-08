@@ -1,10 +1,10 @@
 from flask import Blueprint
-from flask_restful import Resource, reqparse, Api, fields, marshal_with, abort
+from flask_restful import Resource, reqparse, fields, marshal_with, abort
 from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.database.models import Library
-
+from app.resources.BaseApi import BaseApi
 
 library_fields = {
     '_id': fields.Integer,
@@ -30,7 +30,11 @@ library_fields = {
 
 
 libraryReqparse = reqparse.RequestParser()
-libraryReqparse.add_argument('name', type=str, trim=True)
+libraryReqparse.add_argument('name', type=str,
+                             location=['form', 'json'],
+                             required=True,
+                             nullable=False,
+                             help='No library name provided')
 libraryReqparse.add_argument('location_road', type=str, trim=True)
 libraryReqparse.add_argument('location_number', type=str, trim=True)
 libraryReqparse.add_argument('location_detail', type=str, trim=True)
@@ -62,15 +66,17 @@ class LibraryListResource(Resource):
     @marshal_with(library_fields)
     def post(self):
         args = libraryReqparse.parse_args()
-        library = Library(**args)
 
         error_message = None
+
+        library = Library(**args)
+
         try:
             db.add(library)
             db.commit()
         except IntegrityError as e:
             print(str(e))
-            error_message = 'Faulty or a duplicate record'
+            error_message = str(e)
         except Exception as e:
             print(str(e))
             error_message = str(e)
@@ -140,7 +146,7 @@ class LibraryResource(Resource):
 
 
 libraries_api = Blueprint('resources.libraries', __name__)
-api = Api(libraries_api)
+api = BaseApi(libraries_api)
 api.add_resource(
     LibraryListResource,
     '/library',

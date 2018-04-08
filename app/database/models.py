@@ -1,6 +1,9 @@
-from sqlalchemy import Column, Text
+from sqlalchemy import Column, Text, String
 from sqlalchemy.dialects.mysql import TINYINT, INTEGER
+from sqlalchemy.orm import validates
+
 from app.database import Base
+from app.resources.BaseApi import InvalidArgumentError
 
 
 class Library(Base):
@@ -10,7 +13,9 @@ class Library(Base):
                  INTEGER(11, unsigned=True),
                  primary_key=True,
                  autoincrement=True)
-    name = Column('name', Text)
+    name = Column('name', String(20),
+                  unique=True,
+                  nullable=False)
     location_road = Column('location_road', Text)
     location_number = Column('location_number', Text)
     location_detail = Column('location_detail', Text)
@@ -25,3 +30,10 @@ class Library(Base):
     fac_self_promo = Column('fac_self_promo', TINYINT(1))
     fac_other = Column('fac_other', Text)
     req_speaker = Column('req_speaker', Text)
+
+    @validates('name')
+    def validate_not_emtpy(self, key, field):
+        if not field:
+            raise InvalidArgumentError("{} must be not empty.".format(key))
+
+        return field
