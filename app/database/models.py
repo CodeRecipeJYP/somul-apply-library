@@ -3,7 +3,7 @@ from sqlalchemy.dialects.mysql import TINYINT, INTEGER
 from sqlalchemy.orm import validates
 
 from app.database import Base
-from app.resources.BaseApi import InvalidArgumentError
+from app.resources.errors import InvalidArgumentError
 
 
 class Library(Base):

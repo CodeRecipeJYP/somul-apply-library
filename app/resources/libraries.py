@@ -1,10 +1,10 @@
 from flask import Blueprint
-from flask_restful import Resource, reqparse, fields, marshal_with, abort
+from flask_restful import Resource, reqparse, fields, marshal_with, Api
 from sqlalchemy.exc import IntegrityError
 
 from app import db
 from app.database.models import Library
-from app.resources.BaseApi import BaseApi
+from app.resources.errors import DuplicatedDataError, DataNotFoundError
 
 library_fields = {
     '_id': fields.Integer,
@@ -54,6 +54,14 @@ libraryReqparse.add_argument('fac_other', type=str, trim=True)
 libraryReqparse.add_argument('req_speaker', type=str, trim=True)
 
 
+def get_or_404(clazz, pk):
+    instance = db.query(clazz).filter_by(_id=pk).first()
+    if instance is None:
+        raise DataNotFoundError("Library {} Not found".format(pk))
+
+    return instance
+
+
 class LibraryListResource(Resource):
     def __init__(self):
         super().__init__()
@@ -67,8 +75,6 @@ class LibraryListResource(Resource):
     def post(self):
         args = libraryReqparse.parse_args()
 
-        error_message = None
-
         library = Library(**args)
 
         try:
@@ -76,23 +82,14 @@ class LibraryListResource(Resource):
             db.commit()
         except IntegrityError as e:
             print(str(e))
-            error_message = str(e)
+            db.rollback()
+            raise DuplicatedDataError(str(e.orig))
         except Exception as e:
             print(str(e))
-            error_message = str(e)
-        finally:
-            if error_message:
-                db.rollback()
-                raise Exception(error_message)
+            db.rollback()
+            raise e
+
         return library
-
-
-def get_or_404(clazz, pk):
-    instance = db.query(clazz).filter_by(_id=pk).first()
-    if instance is None:
-        abort(404, message="Library {} Not found".format(pk))
-
-    return instance
 
 
 class LibraryResource(Resource):
@@ -106,47 +103,42 @@ class LibraryResource(Resource):
         args = libraryReqparse.parse_args()
         library = get_or_404(Library, pk)
 
-        error_message = None
+        for key, value in args.items():
+            if value is None:
+                continue
+
+            setattr(library, key, value)
+
         try:
-            for key, value in args.items():
-                if value is None:
-                    continue
-
-                setattr(library, key, value)
-
             db.merge(library)
             db.commit()
         except IntegrityError as e:
             print(str(e))
-            error_message = 'Faulty or a duplicate record'
+            db.rollback()
+            raise DuplicatedDataError(str(e.orig))
         except Exception as e:
             print(str(e))
-            error_message = str(e)
-        finally:
-            if error_message:
-                db.rollback()
-                raise Exception(error_message)
+            db.rollback()
+            raise e
+
         return library
 
     def delete(self, pk):
         library = get_or_404(Library, pk)
 
-        error_message = None
         try:
             db.delete(library)
             db.commit()
         except Exception as e:
             print(str(e))
-            error_message = str(e)
-        finally:
-            if error_message:
-                db.rollback()
-                raise Exception(error_message)
+            db.rollback()
+            raise e
+
         return '', 204
 
 
 libraries_api = Blueprint('resources.libraries', __name__)
-api = BaseApi(libraries_api)
+api = Api(libraries_api)
 api.add_resource(
     LibraryListResource,
     '/library',
